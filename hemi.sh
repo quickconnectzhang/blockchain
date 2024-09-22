@@ -15,11 +15,11 @@ REQUIRED_USERS=$NUM_KEYS
 
 # 检查私钥数量是否满足要求
 if [ "$NUM_KEYS" -lt "$REQUIRED_USERS" ]; then
-    echo "PRIVATE_KEYS数组中的私钥数量不足$REQUIRED_USERS个，请检查并添加足够的私钥。"
+    echo "PRIVATE_KEYS数组中的私钥数量不足"
     exit 1
 fi
 
-# 循环创建用户并设置启动脚本
+# 循环创建用户并置启动脚本
 for i in $(seq 1 "$REQUIRED_USERS"); do
     USERNAME="user$i"
     USER_KEY="${PRIVATE_KEYS[$((i-1))]}"
@@ -48,7 +48,7 @@ cd ~/heminetwork_v0.4.3_linux_amd64
 export POPM_BTC_PRIVKEY='$USER_KEY'
 export POPM_STATIC_FEE=51
 export POPM_BFG_URL=wss://testnet.rpc.hemi.network/v1/ws/public
-./popmd
+./popmd &
 EOF"
 
     # 检查启动脚本是否成功创建
@@ -66,6 +66,15 @@ EOF"
 
     echo "已为用户$USERNAME 创建并赋予启动脚本执行权限。"
 
+    # 执行启动脚本以安装 popmd
+    sudo -u "$USERNAME" bash "$USER_HOME/start_popmd.sh"
+    if [ $? -ne 0 ]; then
+        echo "为用户$USERNAME 执行启动脚本失败。"
+        continue
+    fi
+
+    echo "已为用户$USERNAME 安装 popmd。"
+
     # 创建 systemd 服务文件
     sudo tee "/etc/systemd/system/popmd-${USERNAME}.service" > /dev/null <<EOF
 [Unit]
@@ -82,12 +91,22 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+    # 检查服务文件是否成功创建
     if [ $? -ne 0 ]; then
         echo "为用户$USERNAME 创建 systemd 服务文件失败。"
         continue
     fi
 
     echo "已为用户$USERNAME 创建 systemd 服务文件。"
+
+    # 启用 systemd 服务
+    sudo systemctl enable "popmd-${USERNAME}.service"
+    if [ $? -ne 0 ]; then
+        echo "启用 popmd-${USERNAME}.service 失败。"
+        continue
+    fi
+
+    echo "已启用 popmd-${USERNAME}.service。"
 done
 
 # 重新加载 systemd 守护进程
@@ -102,19 +121,17 @@ for i in $(seq 1 "$REQUIRED_USERS"); do
     USERNAME="user$i"
     SERVICE_NAME="popmd-${USERNAME}.service"
 
-    sudo systemctl enable "$SERVICE_NAME"
-    if [ $? -ne 0 ]; then
-        echo "启用 $SERVICE_NAME 失败。"
-        continue
-    fi
+    echo "启动并检查 $SERVICE_NAME 服务..."
+    sudo systemctl start "$SERVICE_NAME" &> /dev/null
+    sudo systemctl enable "$SERVICE_NAME" &> /dev/null
+    sudo systemctl status "$SERVICE_NAME" --no-pager &> /dev/null
 
-    sudo systemctl start "$SERVICE_NAME"
-    if [ $? -ne 0 ]; then
-        echo "启动 $SERVICE_NAME 失败。"
-        continue
+    # 检查服务是否成功启动
+    if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+        echo "$SERVICE_NAME 已成功启动。"
+    else
+        echo "$SERVICE_NAME 启动失败。"
     fi
-
-    echo "已启用并启动 $SERVICE_NAME。"
 done
 
 echo "所有用户的 popmd 服务已配置并启动完成。"
