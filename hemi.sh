@@ -15,7 +15,7 @@ REQUIRED_USERS=$NUM_KEYS
 
 # 检查私钥数量是否满足要求
 if [ "$NUM_KEYS" -lt "$REQUIRED_USERS" ]; then
-    echo "PRIVATE_KEYS数组中的私钥数量不足"
+    echo "PRIVATE_KEYS数组中的私钥数量不足$REQUIRED_USERS个，请检查并添加足够的私钥。"
     exit 1
 fi
 
@@ -83,6 +83,9 @@ After=network.target
 
 [Service]
 User=${USERNAME}
+Environment=POPM_BTC_PRIVKEY=${USER_KEY}
+Environment=POPM_STATIC_FEE=51
+Environment=POPM_BFG_URL=wss://testnet.rpc.hemi.network/v1/ws/public
 ExecStart=${USER_HOME}/heminetwork_v0.4.3_linux_amd64/popmd
 Restart=always
 RestartSec=5
@@ -122,6 +125,8 @@ for i in $(seq 1 "$REQUIRED_USERS"); do
     SERVICE_NAME="popmd-${USERNAME}.service"
 
     echo "启动并检查 $SERVICE_NAME 服务..."
+    sudo systemctl stop "$SERVICE_NAME" &> /dev/null
+
     sudo systemctl start "$SERVICE_NAME" &> /dev/null
     sudo systemctl enable "$SERVICE_NAME" &> /dev/null
     sudo systemctl status "$SERVICE_NAME" --no-pager &> /dev/null
@@ -131,6 +136,8 @@ for i in $(seq 1 "$REQUIRED_USERS"); do
         echo "$SERVICE_NAME 已成功启动。"
     else
         echo "$SERVICE_NAME 启动失败。"
+        # 输出服务日志
+        sudo journalctl -u "$SERVICE_NAME" --no-pager -n 50
     fi
 done
 
