@@ -16,7 +16,7 @@ def check_cast_command():
     return True
 
 # 定义私钥和密码
-password = "just1lovewrl"
+password = "xxxxx"
 home_dir = os.path.expanduser('~')
 cast_path = '/root/.foundry/bin/cast'
 
